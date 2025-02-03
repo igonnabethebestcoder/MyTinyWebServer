@@ -18,6 +18,7 @@ Log* Log::getInstance()
 
 bool Log::init()
 {
+    //生成的日志文件在bin/x64/Debug中，和.out文件一起
 	filePath = get_current_date() + ".log";
 	logfile.open(filePath, ios::app);
     time_t t = time(NULL);
