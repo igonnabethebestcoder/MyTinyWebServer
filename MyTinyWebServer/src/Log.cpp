@@ -25,6 +25,7 @@ bool Log::init()
     struct tm* sys_tm = localtime(&t);
     struct tm my_tm = *sys_tm;
     date = my_tm.tm_mday;
+    m_close_log = 0;
 	if (!logfile.is_open())
 	{
 		cerr << "Can't open log file : " << filePath << endl;
@@ -119,12 +120,14 @@ string Log::get_current_date() {
 	return date_stream.str();
 }
 
-#define TEST_LOG_H
+//#define TEST_LOG_H
 #ifdef TEST_LOG_H
 int main()
 {
     // 获取日志实例
     Log* log = Log::getInstance();
+
+    int m_close_log = 0;
 
     // 初始化日志系统
     if (log->init()) {
@@ -148,6 +151,10 @@ int main()
     }
 
     std::cout << "Logs have been written successfully." << std::endl;
+
+
+    char str[6] = "nihao";
+    LOG_INFO("%s", str);
     return 0;
 }
 

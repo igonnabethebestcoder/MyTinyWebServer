@@ -24,6 +24,7 @@
 #include <sys/wait.h>
 #include <sys/uio.h>
 #include <map>
+#include "Log.h"
 
 #ifndef HTTP_CONNECT_H
 #define HTTP_CONNECT_H
@@ -66,8 +67,8 @@ enum HTTP_METHOD
 enum HTTPStatusCode
 {
     // 自定义
-    NO_REQUEST,          // 请求不完整，需要继续读取客户端数据
-    GET_REQUEST,         // 获得了完整的客户端请求
+    INCOMPLETE_REQUEST,    // 请求不完整，需要继续读取客户端数据
+    GET_REQUEST,           // 获得了完整的客户端请求
 
     // 1xx：信息响应
     CONTINUE = 100,        // 继续：客户端应继续请求
@@ -122,9 +123,9 @@ enum HTTPStatusCode
 // 从状态机状态，行的读取状态
 enum LINE_STATUS
 {
-    LINE_OK = 0,  // 读取到完整的行
-    LINE_BAD,     // 行出错
-    LINE_OPEN     // 行数据尚不完整
+    LINE_BAD = -1,  // 行出错
+    LINE_OK,        // 读取到完整的行 
+    LINE_OPEN       // 行数据尚不完整
 };
 
 // 主状态机的状态
@@ -138,8 +139,10 @@ enum CHECK_STATE
 class HttpConnect
 {
 public:
+
     HttpConnect();
     ~HttpConnect();
+
     //解析HTTP请求（不处理）
     HTTPStatusCode processRead();
     //生成HTTP响应报文
@@ -148,10 +151,14 @@ public:
     // 非阻塞读操作,LT和ET两种模式，
     // Q: 非阻塞体现在哪？
     bool readOnce();
+
     // 非阻塞写操作
     bool write();
 
 private:
+    //初始化HTTP处理类
+    void init();
+
     ///--------- 解析请求函数
     // 解析请求行
     HTTPStatusCode parseRequestLine(char* text);
@@ -181,6 +188,8 @@ private:
     // 添加空行
     bool add_blank_line();
 
+    // 获取当前解析的行
+    char* get_line() { return m_read_buf + m_start_line; };
 
 private:
     int m_sockfd;  // 套接字文件描述符
@@ -189,8 +198,8 @@ private:
     CHECK_STATE m_check_state;  // 主状态机的状态
     HTTP_METHOD m_method;  // HTTP请求方法
 
-    //读写缓冲区
-    char* m_read_buf;  // 读缓冲区
+    // 读写缓冲区
+    char* m_read_buf;  // 读缓冲区,动态增大缓冲区大小
     long m_read_idx;  // 已经读取的字节数
     long m_checked_idx;  // 当前正在分析的字节位置
     int m_start_line;  // 当前正在解析的行的起始位置
@@ -208,7 +217,7 @@ private:
 
     bool m_linger;  // 是否保持连接,opt 考虑放入Client中
 
-
+    // 响应报文属性
     char* m_file_address;  // 客户端请求的文件被mmap到内存中的起始位置
     struct stat m_file_stat;  // 目标文件的状态信息
     struct iovec m_iv[2];  // 用于写操作的iovec
@@ -219,6 +228,7 @@ private:
     int bytes_have_send;  // 已经发送的数据字节数
     char* doc_root;  // 网站的根目录
 
+    int m_close_log; // 是否关闭当前类日志记录
 };
 #endif // !HTTP_CONNECT_H
 

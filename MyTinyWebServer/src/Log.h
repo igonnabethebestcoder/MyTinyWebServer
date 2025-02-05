@@ -57,6 +57,13 @@ private:
 	int date;        //因为按天分类,记录当前时间是那一天
 	string logstr;
 	// 开不开启日志由server决定，该属性多余
-	//int close_log; // 关闭日志标记，0关闭，1开启
+	int m_close_log; // 关闭日志标记，0关闭，1开启
 };
+
+// 每一个调用宏函数的类中都应该由m_close_log属性
+#define LOG_DEBUG(format, ...) if(0 == m_close_log) {Log::getInstance()->writeLog(1, format, ##__VA_ARGS__);}
+#define LOG_INFO(format, ...) if(0 == m_close_log) {Log::getInstance()->writeLog(2, format, ##__VA_ARGS__);}
+#define LOG_WARN(format, ...) if(0 == m_close_log) {Log::getInstance()->writeLog(3, format, ##__VA_ARGS__);}
+#define LOG_ERROR(format, ...) if(0 == m_close_log) {Log::getInstance()->writeLog(4, format, ##__VA_ARGS__);}
+
 #endif
