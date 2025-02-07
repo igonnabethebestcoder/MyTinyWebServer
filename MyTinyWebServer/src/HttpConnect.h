@@ -24,6 +24,7 @@
 #include <sys/wait.h>
 #include <sys/uio.h>
 #include <map>
+#include <unordered_map>
 #include "Log.h"
 
 #ifndef HTTP_CONNECT_H
@@ -69,6 +70,7 @@ enum HTTPStatusCode
     // 自定义
     INCOMPLETE_REQUEST,    // 请求不完整，需要继续读取客户端数据
     GET_REQUEST,           // 获得了完整的客户端请求
+    FILE_REQUEST,         // 文件请求，获取文件成功
 
     // 1xx：信息响应
     CONTINUE = 100,        // 继续：客户端应继续请求
@@ -95,7 +97,7 @@ enum HTTPStatusCode
     // 4xx：客户端错误
     BAD_REQUEST = 400,       // 错误请求：服务器无法理解客户端请求
     UNAUTHORIZED,            // 未授权：请求需要身份验证
-    FORBIDDEN,               // 禁止：服务器理解请求，但拒绝执行
+    FORBIDDEN = 403,               // 禁止：服务器理解请求，但拒绝执行
     NOT_FOUND,               // 未找到：请求的资源未找到
     METHOD_NOT_ALLOWED,      // 方法不允许：请求方法被禁止
     NOT_ACCEPTABLE,          // 不可接受：服务器无法根据请求的内容返回响应
@@ -136,6 +138,42 @@ enum CHECK_STATE
     CHECK_STATE_CONTENT           // 解析请求体
 };
 
+// 响应报文的content-type
+enum  ContentType 
+{
+    TEXT_HTML,          // text/html
+    TEXT_CSS,           // text/css
+    TEXT_PLAIN,         // text/plain
+    TEXT_JAVASCRIPT,    // text/javascript
+    APPLICATION_JSON,   // application/json
+    APPLICATION_XML,    // application/xml
+    APPLICATION_PDF,    // application/pdf
+    APPLICATION_ZIP,    // application/zip
+    APPLICATION_OCTET,  // application/octet-stream (二进制文件)
+    IMAGE_JPEG,         // image/jpeg
+    IMAGE_PNG,          // image/png
+    IMAGE_GIF,          // image/gif
+    IMAGE_SVG,          // image/svg+xml
+    IMAGE_WEBP,         // image/webp
+    AUDIO_MPEG,         // audio/mpeg
+    AUDIO_OGG,          // audio/ogg
+    VIDEO_MP4,          // video/mp4
+    VIDEO_WEBM,         // video/webm
+    VIDEO_OGG,          // video/ogg
+    MULTIPART_FORMDATA, // multipart/form-data
+    APPLICATION_X_WWW_FORM_URLENCODED, // application/x-www-form-urlencoded
+    UNKNOWN             // 未知类型
+};
+
+struct HttpStatusCorrespondText
+{
+    const char* title;
+    const char* content;
+};
+
+// 声明全局 HTTP 状态映射表
+extern unordered_map<int, HttpStatusCorrespondText> http_status_map;
+
 class HttpConnect
 {
 public:
@@ -143,10 +181,12 @@ public:
     HttpConnect();
     ~HttpConnect();
 
-    //解析HTTP请求（不处理）
-    HTTPStatusCode processRead();
-    //生成HTTP响应报文
-    HTTPStatusCode processWrite();
+    // 外部初始化
+    void init(int sockfd, const sockaddr_in& addr, char* root, int TRIGMode = ET,
+        int close_log = 0, string user = "", string passwd = "", string sqlname = "");
+
+    // 读写fd总流程
+    void process();
 
     // 非阻塞读操作,LT和ET两种模式，
     // Q: 非阻塞体现在哪？
@@ -155,9 +195,23 @@ public:
     // 非阻塞写操作
     bool write();
 
+    // 设置epoll实例fd
+    static void setHttpEpollfd(int epollfd);
+
+    // 关闭连接
+    void close_conn(bool real_close = true);
+
+public:
+    static int m_epollfd;// epoll实例表fd，全部http实例公用
+
 private:
     //初始化HTTP处理类
     void init();
+
+    //解析HTTP请求（不处理）
+    HTTPStatusCode processRead();
+    //生成HTTP响应报文
+    bool processWrite(HTTPStatusCode res);
 
     ///--------- 解析请求函数
     // 解析请求行
@@ -178,15 +232,26 @@ private:
     // 添加状态行
     bool add_status_line(int status, const char* title);
     // 添加响应头
-    bool add_headers(int content_length);
+    bool add_headers(int content_length, ContentType type = UNKNOWN);
     // 添加内容类型
-    bool add_content_type();
+    bool add_content_type(ContentType type = UNKNOWN);
     // 添加内容长度
     bool add_content_length(int content_length);
     // 添加保持连接
     bool add_linger();
     // 添加空行
     bool add_blank_line();
+
+    // 非文件请求响应函数
+    bool non_file_request_responce(int status);
+    // 文件请求响应
+    bool file_request_responce(int status);
+
+    // 获取响应报文类型的字符串
+    const char* getContentTypeString(ContentType type);
+
+    // 查找函数
+    const HttpStatusCorrespondText* getHttpStatusText(int status);
 
     // 获取当前解析的行
     char* get_line() { return m_read_buf + m_start_line; };
@@ -199,11 +264,11 @@ private:
     HTTP_METHOD m_method;  // HTTP请求方法
 
     // 读写缓冲区
-    char* m_read_buf;  // 读缓冲区,动态增大缓冲区大小
+    char m_read_buf[HTTP_READ_BUFFER_MAX_SIZE];  // 读缓冲区,动态增大缓冲区大小
     long m_read_idx;  // 已经读取的字节数
     long m_checked_idx;  // 当前正在分析的字节位置
     int m_start_line;  // 当前正在解析的行的起始位置
-    char* m_write_buf;  // 写缓冲区
+    char m_write_buf[HTTP_WRITE_BUFFER_MAX_SIZE];  // 写缓冲区
     int m_write_idx;  // 写缓冲区中待发送的字节数
 
     int m_TRIGMode;  // 触发模式,LT or ET
@@ -215,7 +280,7 @@ private:
     long m_content_length;  // HTTP请求的消息体长度
 
 
-    bool m_linger;  // 是否保持连接,opt 考虑放入Client中
+    bool m_linger;  // 是否保持连接, 保持连接则重置数据
 
     // 响应报文属性
     char* m_file_address;  // 客户端请求的文件被mmap到内存中的起始位置
@@ -230,6 +295,20 @@ private:
 
     int m_close_log; // 是否关闭当前类日志记录
 };
+
+/// ----begin HTTP协议类使用的epoll操作函数封装----
+
+//对文件描述符设置非阻塞
+int setnonblocking(int fd);
+//将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
+void addfd(int epollfd, int fd, bool one_shot, int TRIGMode);
+//从内核时间表删除描述符
+void removefd(int epollfd, int fd);
+//将事件重置为EPOLLONESHOT
+void modfd(int epollfd, int fd, int ev, int TRIGMode);
+
+/// ----end HTTP协议类使用的epoll操作函数封装----
+
 #endif // !HTTP_CONNECT_H
 
 

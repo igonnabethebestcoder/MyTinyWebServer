@@ -78,18 +78,18 @@
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
     <ClInclude Include="src\Config.h" />
+    <ClInclude Include="src\HttpConnect.h" />
     <ClInclude Include="src\Log.h" />
     <ClInclude Include="src\Client.h" />
     <ClInclude Include="src\Server.h" />
-    <ClInclude Include="src\HttpConnect.h" />
     <ClInclude Include="src\EventLoop.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Config.cpp" />
+    <ClCompile Include="src\HttpConnect.cpp" />
     <ClCompile Include="src\Log.cpp" />
     <ClCompile Include="src\Client.cpp" />
     <ClCompile Include="src\Server.cpp" />
-    <ClCompile Include="src\HttpConnect.cpp" />
     <ClCompile Include="src\EventLoop.cpp" />
   </ItemGroup>
   <ItemDefinitionGroup />
